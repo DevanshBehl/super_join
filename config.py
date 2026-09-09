@@ -68,6 +68,11 @@ LLM_MAX_RETRIES: int = _int("LLM_MAX_RETRIES", 6)
 LLM_RETRY_BASE_DELAY: float = _float("LLM_RETRY_BASE_DELAY", 2.0)
 LLM_TIMEOUT_SECONDS: float = _float("LLM_TIMEOUT_SECONDS", 180.0)
 LLM_MAX_CONCURRENCY: int = _int("LLM_MAX_CONCURRENCY", 6)
+EMBEDDING_MAX_CONCURRENCY: int = _int("EMBEDDING_MAX_CONCURRENCY", 4)
+# Adjudication runs one call per residual pair. The pairs are independent,
+# so the only reason to serialise them is a rate limit, which the limiter
+# already enforces on its own.
+ADJUDICATION_MAX_CONCURRENCY: int = _int("ADJUDICATION_MAX_CONCURRENCY", 4)
 # Client side pacing. Free tier keys are capped per minute per model, and a
 # burst that exceeds the cap wastes retries rather than going faster.
 LLM_REQUESTS_PER_MINUTE: int = _int("LLM_REQUESTS_PER_MINUTE", 15)

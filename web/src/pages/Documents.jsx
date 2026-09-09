@@ -239,22 +239,28 @@ export default function Documents({ onNavigate }) {
                       <thead>
                         <tr>
                           <th>Document</th>
-                          <th>Type</th>
+                          <th style={{ width: 150 }}>Type</th>
                           <th>Publisher</th>
-                          <th className="nowrap">As of</th>
-                          <th style={{ textAlign: 'right' }}>Pages</th>
-                          <th style={{ textAlign: 'right' }}>Chunks</th>
-                          <th style={{ textAlign: 'right' }}>Facts</th>
-                          <th style={{ textAlign: 'right' }}>Verified</th>
-                          <th>Status</th>
+                          <th className="nowrap" style={{ width: 106 }}>As of</th>
+                          <th style={{ textAlign: 'right', width: 74 }}>Pages</th>
+                          <th style={{ textAlign: 'right', width: 82 }}>Chunks</th>
+                          <th style={{ textAlign: 'right', width: 78 }}>Facts</th>
+                          <th style={{ textAlign: 'right', width: 104 }}>Verified</th>
+                          <th style={{ width: 96 }}>Status</th>
                         </tr>
                       </thead>
                       <tbody>
                         {docs.map((doc, index) => (
                           <tr key={doc.doc_id} className="reveal" style={{ '--i': index }}>
-                            <td style={{ maxWidth: 330 }}>
-                              <div style={{ fontWeight: 500 }}>{doc.title || doc.filename}</div>
-                              {doc.title ? <div className="faint trunc" style={{ fontSize: 11.5 }}>{doc.filename}</div> : null}
+                            <td style={{ width: '30%', minWidth: 240 }}>
+                              <div className="clamp-2" style={{ fontWeight: 500 }} title={doc.title || doc.filename}>
+                                {doc.title || doc.filename}
+                              </div>
+                              {doc.title && doc.title !== doc.filename ? (
+                                <div className="faint" style={{ fontSize: 11.5, marginTop: 2 }}>
+                                  <span className="trunc">{doc.filename}</span>
+                                </div>
+                              ) : null}
                               {doc.progress_stage ? (
                                 <div style={{ marginTop: 7 }}>
                                   <StageLine current={doc.progress_stage} />
@@ -262,7 +268,9 @@ export default function Documents({ onNavigate }) {
                               ) : null}
                             </td>
                             <td className="muted">{doc.doc_type || '—'}</td>
-                            <td className="muted trunc">{doc.publisher || '—'}</td>
+                            <td className="muted" style={{ maxWidth: 190 }}>
+                              <span className="trunc">{doc.publisher || '—'}</span>
+                            </td>
                             <td className="muted num nowrap">{shortDate(doc.as_of_date)}</td>
                             <td className="num" style={{ textAlign: 'right' }}>{doc.n_pages ?? 0}</td>
                             <td className="num muted" style={{ textAlign: 'right' }}>{doc.n_chunks ?? 0}</td>

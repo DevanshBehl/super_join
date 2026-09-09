@@ -9,6 +9,7 @@ forcing a verdict.
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 from typing import Any, Sequence
 
@@ -170,12 +171,26 @@ def adjudicate(residue: list[dict[str, Any]], *, recorder: Any | None = None) ->
             f"{len(residue) - config.ADJUDICATION_MAX_PAIRS} residual pairs were left undecided by the per run cap",
         )
     facts = load_facts([r["fact_a"] for r in ordered] + [r["fact_b"] for r in ordered])
-    out: list[dict[str, Any]] = []
-    for record in ordered:
-        a, b = facts.get(record["fact_a"]), facts.get(record["fact_b"])
-        if a is None or b is None:
-            continue
-        decided = adjudicate_pair(a, b, record, recorder=recorder)
-        if decided is not None:
-            out.append(decided)
-    return out
+    work = [
+        (record, facts[record["fact_a"]], facts[record["fact_b"]])
+        for record in ordered
+        if record["fact_a"] in facts and record["fact_b"] in facts
+    ]
+    if not work:
+        return []
+
+    def decide(item: tuple[dict[str, Any], dict[str, Any], dict[str, Any]]) -> dict[str, Any] | None:
+        record, a, b = item
+        return adjudicate_pair(a, b, record, recorder=recorder)
+
+    # One call per pair, and the pairs do not depend on each other. Ordering is
+    # preserved through pool.map so the output stays deterministic, which
+    # matters because the caller writes these links in the order returned.
+    workers = max(1, min(config.ADJUDICATION_MAX_CONCURRENCY, len(work)))
+    if workers == 1:
+        decided_all = [decide(item) for item in work]
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            decided_all = list(pool.map(decide, work))
+
+    return [decided for decided in decided_all if decided is not None]

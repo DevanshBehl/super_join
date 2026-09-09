@@ -349,3 +349,40 @@ def test_different_addresses_do_not_collapse():
 def test_clean_text_folds_unicode_and_whitespace():
     assert N.clean_text("Revenue  was  8,142") == "Revenue was 8,142"
     assert N.snake_case("Revenue From Services!") == "revenue_from_services"
+
+
+# ---------------------------------------------------------------------------
+# Parentheses: accounting negative against the legal "spell it, then repeat it
+# in digits" convention. These look identical to a naive search for "(" plus a
+# digit, which is what previously turned "three (3) Executive Directors" into
+# a board of minus three.
+# ---------------------------------------------------------------------------
+
+
+class TestParenthesesConvention:
+    def test_accounting_negative_wraps_the_whole_value(self):
+        assert N.parse_number("(249.1)").value == -249.1
+        assert N.parse_number("(3)").value == -3.0
+        assert N.parse_number("(1,234.5)").value == -1234.5
+
+    def test_accounting_negative_survives_a_leading_currency_marker(self):
+        assert N.parse_number("Rs. (249.1) crore").value == -249.1
+        assert N.parse_number("$(1.2) billion").value == -1.2
+        assert N.parse_number("INR (133)").value == -133.0
+
+    def test_accounting_negative_survives_a_trailing_unit(self):
+        assert N.parse_number("(133) crore").value == -133.0
+
+    def test_spelled_number_repeated_in_digits_is_positive(self):
+        # "three (3) Executive Directors" is a count of three, not minus three.
+        assert N.parse_number("three (3)").value == 3.0
+        assert N.parse_number("two (2)").value == 2.0
+        assert N.parse_number("ten (10)").value == 10.0
+
+    def test_spelled_number_is_not_flagged_negative(self):
+        assert "parentheses_negative" not in N.parse_number("three (3)").qualifiers
+        assert N.parse_number("(3)").qualifiers.get("parentheses_negative") is True
+
+    def test_plain_numbers_are_unaffected(self):
+        assert N.parse_number("3").value == 3.0
+        assert N.parse_number("1,429").value == 1429.0

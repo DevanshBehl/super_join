@@ -268,6 +268,20 @@ def _strip_grouping(token: str) -> str:
     return token.replace(",", "").replace("٬", "")
 
 
+# Accounting notation wraps the *whole* value in parentheses: "(249.1)",
+# "Rs. (249.1) crore", "$(1.2)". Legal and formal prose uses a different
+# convention that looks identical to a naive search: spell the number, then
+# repeat it in digits, as in "three (3) Executive Directors". Matching "(" plus
+# a digit anywhere in the string conflated the two and turned every "three (3)"
+# into -3. The negative reading is only correct when nothing but whitespace and
+# an optional currency marker precedes the opening parenthesis.
+_ACCOUNTING_NEGATIVE_RE = re.compile(
+    r"^\s*(?:[$\u20ac\u00a3\u00a5\u20b9]|(?:rs|inr|usd|eur|gbp|jpy|aud|cad)\.?)?\s*"
+    r"\(\s*[-+]?[\d.,]",
+    re.IGNORECASE,
+)
+
+
 def parse_number(raw: str) -> NumberParse:
     """Parse the numeric content of a raw string, keeping every qualifier.
 
@@ -279,7 +293,7 @@ def parse_number(raw: str) -> NumberParse:
         return NumberParse(None)
 
     qualifiers: dict[str, Any] = {}
-    negative_parens = bool(re.search(r"\(\s*[-+]?[\d.,]", text)) and ")" in text
+    negative_parens = bool(_ACCOUNTING_NEGATIVE_RE.match(text))
 
     for pattern, name in _APPROX_PATTERNS:
         if re.search(pattern, text, re.IGNORECASE):

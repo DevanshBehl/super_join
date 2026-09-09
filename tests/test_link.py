@@ -351,3 +351,64 @@ def test_incremental_generation_only_touches_the_new_document(seeded):
     involved = {p["fact_a"] for p in pairs} | {p["fact_b"] for p in pairs}
     assert "f4" in involved
     assert all("f4" in (p["fact_a"], p["fact_b"]) for p in pairs)
+
+
+# ---------------------------------------------------------------------------
+# A null unit dimension used to act as a wildcard that matched anything. That
+# is right when both sides assert the same predicate and one document simply
+# omitted the unit, and wrong otherwise: it let a revenue in dollars be
+# "corroborated" by a shipment count, because blocking had already paired them
+# on the shared entity.
+# ---------------------------------------------------------------------------
+
+
+def test_revenue_does_not_corroborate_a_bare_count():
+    revenue = fact(
+        predicate_canonical="revenue",
+        value_raw="$1 billion", value_num=1_000_000_000.0,
+        unit_canonical="USD", unit_dimension="currency", currency="USD",
+    )
+    shipments = fact(
+        fact_id="b" * 32, doc_id="doc2",
+        predicate_canonical="count",
+        value_raw="740 Mn", value_num=740_000_000.0,
+        unit_canonical=None, unit_dimension=None, currency=None,
+    )
+    decision = evaluate_pair(revenue, shipments)
+    assert decision.relation == "unrelated"
+    assert "different predicates" in decision.explanation
+
+
+def test_two_unitless_facts_with_different_predicates_are_unrelated():
+    nominee = fact(
+        predicate_canonical="non_executive_nominee_directors_count",
+        value_raw="3", value_num=3.0,
+        unit_canonical=None, unit_dimension=None, currency=None,
+    )
+    executive = fact(
+        fact_id="b" * 32, doc_id="doc2",
+        predicate_canonical="executive_directors_count",
+        value_raw="three (3)", value_num=3.0,
+        unit_canonical=None, unit_dimension=None, currency=None,
+    )
+    decision = evaluate_pair(nominee, executive)
+    assert decision.relation == "unrelated"
+
+
+def test_a_missing_unit_is_still_a_wildcard_for_the_same_predicate():
+    # The behaviour the wildcard was written for must survive: one document
+    # states the unit, the other omits it, but both assert the same predicate.
+    stated = fact(unit_canonical="INR", unit_dimension="currency", currency="INR")
+    omitted = fact(
+        fact_id="b" * 32, doc_id="doc2",
+        unit_canonical=None, unit_dimension=None, currency=None,
+    )
+    decision = evaluate_pair(stated, omitted)
+    assert decision.relation != "unrelated"
+
+
+def test_different_predicates_sharing_a_dimension_are_still_compared():
+    a = fact(predicate_canonical="revenue_from_services")
+    b = fact(fact_id="b" * 32, doc_id="doc2", predicate_canonical="total_income")
+    decision = evaluate_pair(a, b)
+    assert decision.relation != "unrelated"

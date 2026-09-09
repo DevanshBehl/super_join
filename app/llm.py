@@ -128,9 +128,55 @@ def retry_delay_seconds(exc: Exception) -> float | None:
     return float(match.group(1)) if match else None
 
 
+# A permanent quota failure trips this breaker once, and every later call
+# fails immediately instead of spending its retries on a request that cannot
+# succeed. Without it an exhausted balance turns a 1,400 chunk ingest into
+# hours of guaranteed 429s, because the error is retryable by shape and
+# permanent in fact.
+_BREAKER_LOCK = threading.Lock()
+_BREAKER_REASON: str | None = None
+
+
 def is_daily_quota_error(exc: Exception) -> bool:
-    """Distinguish the per day cap, which waiting cannot fix, from the per minute cap."""
-    return "PerDay" in str(exc)
+    """Distinguish quota failures that waiting cannot fix from the per minute cap.
+
+    A per day cap, an exhausted prepaid balance and a disabled billing account
+    all arrive as 429 RESOURCE_EXHAUSTED, the same status as the per minute
+    cap. Only the per minute cap clears by sleeping. Retrying the others
+    consumes the remaining attempts and still fails, so they have to be told
+    apart by message rather than by status.
+    """
+    text = str(exc).lower()
+    permanent = (
+        "perday",
+        "per day",
+        "prepayment credits",
+        "credits are depleted",
+        "billing",
+        "free_tier",
+        "exceeded your current quota",
+    )
+    return any(marker in text for marker in permanent)
+
+
+def trip_breaker(reason: str) -> None:
+    """Record a permanent quota failure so later calls stop early."""
+    global _BREAKER_REASON
+    with _BREAKER_LOCK:
+        if _BREAKER_REASON is None:
+            _BREAKER_REASON = reason
+
+
+def breaker_reason() -> str | None:
+    with _BREAKER_LOCK:
+        return _BREAKER_REASON
+
+
+def reset_breaker() -> None:
+    """Clear the breaker. Called by the tests and after a key is replaced."""
+    global _BREAKER_REASON
+    with _BREAKER_LOCK:
+        _BREAKER_REASON = None
 
 
 def thinking_config(model: str, level: str) -> Any:
@@ -197,6 +243,19 @@ def generate_structured(
         )
         return LLMResult(parsed=None, raw_text="", cached=False, error=message)
 
+    tripped = breaker_reason()
+    if tripped is not None:
+        # The quota is gone for the whole run, not just this call. Failing here
+        # keeps the cache and the trace honest without spending a request.
+        message = f"quota exhausted, calls stopped: {tripped}"
+        trace_llm_call(
+            stage=stage, model=model, prompt_version=prompt_version,
+            content_hash=cache_content_hash, cached=False, latency_ms=0.0, error=message,
+        )
+        if recorder is not None:
+            recorder.add_error("llm_quota_exhausted", message, stage=stage)
+        return LLMResult(parsed=None, raw_text="", cached=False, error=message)
+
     from google.genai import types
 
     generation_config = types.GenerateContentConfig(
@@ -245,8 +304,9 @@ def generate_structured(
                 error=last_error, extra={"attempt": attempt + 1},
             )
             if is_daily_quota_error(exc):
-                # A per day cap does not clear by waiting, so stop rather than
-                # burn the remaining retries on a call that cannot succeed.
+                # Does not clear by waiting, so stop rather than burn the
+                # remaining retries, and stop every later call in this run too.
+                trip_breaker(last_error)
                 break
             if attempt + 1 >= config.LLM_MAX_RETRIES or not _retryable(exc):
                 break

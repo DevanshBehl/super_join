@@ -17,15 +17,15 @@
   --surface-4:     #1c1c21;
 
   /* Hairlines. Two weights: structural and emphatic. */
-  --line:          rgba(255, 255, 255, 0.07);
-  --line-strong:   rgba(255, 255, 255, 0.14);
-  --line-bright:   rgba(255, 255, 255, 0.26);
+  --line:          rgba(255, 255, 255, 0.10);
+  --line-strong:   rgba(255, 255, 255, 0.18);
+  --line-bright:   rgba(255, 255, 255, 0.32);
 
   /* Text ramp. */
-  --text-1:        #f4f4f5;
-  --text-2:        #a8a8ad;
-  --text-3:        #6e6e76;
-  --text-4:        #4a4a52;
+  --text-1:        #f7f7f8;
+  --text-2:        #c2c2c9;   /* was #a8a8ad */
+  --text-3:        #9a9aa4;   /* was #6e6e76 - body-adjacent, needs AA */
+  --text-4:        #7d7d88;   /* was #4a4a52 - labels, was well below AA */
 
   --accent:        #ffffff;
   --accent-dim:    rgba(255, 255, 255, 0.55);
@@ -504,20 +504,23 @@ button, input, select, textarea { font: inherit; color: inherit; }
 table { width: 100%; border-collapse: collapse; }
 
 thead th {
-  position: sticky;
-  top: 60px;
-  z-index: 5;
   text-align: left;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.11em;
   font-weight: 500;
-  color: var(--text-4);
+  color: var(--text-3);
   padding: 11px 14px;
   background: var(--surface-2);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-strong);
   white-space: nowrap;
 }
+
+/* Fixed layout makes the columns obey their declared widths instead of being
+   sized by the longest cell, which is what let one long title shove the
+   numeric columns out of alignment. */
+table { table-layout: auto; }
+tbody td { max-width: 340px; }
 
 tbody td {
   padding: 11px 14px;
@@ -536,7 +539,25 @@ tbody tr.expanded td { border-bottom-color: transparent; }
 .muted { color: var(--text-3); }
 .faint { color: var(--text-4); }
 .mono { font-family: var(--font-mono); }
-.trunc { display: block; max-width: 30ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trunc {
+  display: block;
+  max-width: 30ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Defensive: display:block on a cell collapses it out of the column model,
+   which misaligns every row. Truncation belongs on a child of the cell. */
+td.trunc, th.trunc { display: table-cell; }
+
+/* Long titles get two lines and then an ellipsis, so one verbose document
+   cannot triple the height of every row around it. */
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .nowrap { white-space: nowrap; }
 
 /* The disclosure caret rotates; the row it belongs to reveals below. */

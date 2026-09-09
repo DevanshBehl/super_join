@@ -260,6 +260,34 @@ def evaluate_pair(a: dict[str, Any], b: dict[str, Any]) -> PairDecision:
             "unrelated", 0.95, trace,
             f"One value is measured in {dim_a} and the other in {dim_b}. No conversion exists between those dimensions.",
         )
+
+    # A missing dimension used to be treated as a wildcard that matched
+    # anything. That is right when both facts assert the same predicate and one
+    # document simply omitted the unit, and wrong the rest of the time: it let
+    # "$1 billion in revenues" corroborate "740 Mn express parcel shipments",
+    # because blocking had already paired them on the shared entity and the
+    # null dimension waved the mismatch through. When the predicates disagree,
+    # the two facts have to share a stated dimension to be comparable at all.
+    pred_a = a.get("predicate_canonical") or a.get("predicate")
+    pred_b = b.get("predicate_canonical") or b.get("predicate")
+    if pred_a != pred_b and not (dim_a and dim_b):
+        _check(
+            trace, "unit_dimension",
+            {"a": dim_a, "b": dim_b, "predicate_a": pred_a, "predicate_b": pred_b},
+            "incomparable_without_shared_dimension",
+        )
+        stated = dim_a or dim_b
+        detail = (
+            f"one side is measured in {stated} and the other states no unit"
+            if stated
+            else "neither side states a unit"
+        )
+        return PairDecision(
+            "unrelated", 0.9, trace,
+            f"The two facts assert different predicates ({pred_a} against {pred_b}) and {detail}, "
+            "so there is nothing that makes their values comparable.",
+        )
+
     _check(trace, "unit_dimension", {"a": dim_a, "b": dim_b}, "compatible")
 
     # 2. Currency ----------------------------------------------------------

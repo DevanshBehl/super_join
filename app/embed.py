@@ -8,6 +8,7 @@ and any repeated subject wording cost nothing.
 
 from __future__ import annotations
 
+import concurrent.futures
 import hashlib
 import math
 import time
@@ -86,9 +87,15 @@ def embed_texts(texts: Iterable[str], *, recorder: Any | None = None) -> dict[st
             recorder.count_llm(cached=True)
 
     pending = [t for t in unique if t not in out]
-    for start in range(0, len(pending), config.EMBEDDING_BATCH_SIZE):
-        batch = pending[start : start + config.EMBEDDING_BATCH_SIZE]
-        if not llm.llm_available():
+    batches = [
+        pending[start : start + config.EMBEDDING_BATCH_SIZE]
+        for start in range(0, len(pending), config.EMBEDDING_BATCH_SIZE)
+    ]
+    if not batches:
+        return out
+
+    if not llm.llm_available():
+        for batch in batches:
             trace_llm_call(
                 stage="embed", model=config.EMBEDDING_MODEL, prompt_version="embed-1",
                 content_hash=text_hash("|".join(batch)), cached=False, latency_ms=0.0,
@@ -96,8 +103,25 @@ def embed_texts(texts: Iterable[str], *, recorder: Any | None = None) -> dict[st
             )
             if recorder is not None:
                 recorder.add_error("embedding_unavailable", "no API key", n_texts=len(batch))
-            continue
-        vectors = _embed_batch_with_retries(batch, recorder=recorder)
+        return out
+
+    # Batches are independent, and the per model rate limiter inside
+    # _call_embedding_api still paces the requests, so running them on a
+    # bounded pool trades wall clock for nothing. A corpus of a few thousand
+    # facts is dozens of batches; sequentially that is the slowest stage in
+    # the pipeline despite being the cheapest.
+    workers = max(1, min(config.EMBEDDING_MAX_CONCURRENCY, len(batches)))
+    if workers == 1:
+        results = [(batch, _embed_batch_with_retries(batch, recorder=recorder)) for batch in batches]
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(
+                pool.map(lambda b: (b, _embed_batch_with_retries(b, recorder=recorder)), batches)
+            )
+
+    # Writes are collected and applied on this thread, because the DuckDB
+    # connection is not shared safely across the pool.
+    for batch, vectors in results:
         if vectors is None:
             continue
         db.put_cached_embeddings(

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { api } from '../api'
 import { useApi, useDebounced } from '../hooks'
 import {
@@ -260,9 +260,8 @@ export default function Facts({ initial = {}, collections }) {
                 {facts.map((fact, index) => {
                   const isOpen = open === fact.fact_id
                   return (
-                    <>
+                    <Fragment key={fact.fact_id}>
                       <tr
-                        key={fact.fact_id}
                         className={`row-clickable reveal ${isOpen ? 'expanded' : ''}`}
                         style={{ '--i': index }}
                         onClick={() => setOpen(isOpen ? null : fact.fact_id)}
@@ -306,14 +305,14 @@ export default function Facts({ initial = {}, collections }) {
                         </td>
                         <td className="num muted nowrap">{fact.page_label || fact.page_index}</td>
                       </tr>
-                      <tr key={`${fact.fact_id}-detail`}>
+                      <tr>
                         <td colSpan={8} className="detail-cell">
                           <div className="expand" data-open={isOpen}>
                             <div className="expand-inner">{isOpen ? <FactDetail fact={fact} /> : null}</div>
                           </div>
                         </td>
                       </tr>
-                    </>
+                    </Fragment>
                   )
                 })}
               </tbody>

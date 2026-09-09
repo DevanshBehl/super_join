@@ -394,3 +394,25 @@ def _from_json(value: Any) -> dict[str, Any]:
 
 
 templates.env.filters["from_json"] = _from_json
+
+
+# ---------------------------------------------------------------------------
+# React single page app
+#
+# The four Jinja pages above are unchanged and stay on their documented URLs.
+# The React build, when present, is served alongside them under /app. Nothing
+# here runs if web/dist has not been built, so the backend still starts on a
+# fresh clone with no Node toolchain installed.
+# ---------------------------------------------------------------------------
+
+WEB_DIST = BASE_DIR.parent / "web" / "dist"
+
+if (WEB_DIST / "index.html").is_file():
+    if (WEB_DIST / "assets").is_dir():
+        app.mount("/app/assets", StaticFiles(directory=str(WEB_DIST / "assets")), name="spa-assets")
+
+    @app.get("/app", response_class=HTMLResponse)
+    @app.get("/app/{path:path}", response_class=HTMLResponse)
+    def spa(path: str = "") -> HTMLResponse:
+        """Serve the SPA shell for every client side route under /app."""
+        return HTMLResponse((WEB_DIST / "index.html").read_text(encoding="utf-8"))

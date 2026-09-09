@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Conflict inbox{% endblock %}
+{% macro fact_card(fact, side) %}
+<div class="rounded border border-slate-200 bg-white p-3">
+  <div class="text-xs uppercase tracking-wide text-slate-400">Fact {{ side }}</div>
+  <div class="mt-1 text-sm font-medium">{{ fact.subject_raw }}</div>
+  <div class="font-mono text-xs text-slate-500">{{ fact.predicate_canonical }}</div>
+  <div class="mt-2 text-lg font-semibold">{{ fact.value_raw or fact.value_text }}</div>
+  <div class="text-xs text-slate-500">
+    normalized {{ fact.value_num | shortnum if fact.value_num is not none else (fact.value_text or '') }}
+    {{ fact.unit_canonical or '' }}
+    {% if fact.magnitude_label %}(magnitude {{ fact.magnitude_label }}){% endif %}
+  </div>
+  <div class="mt-2 text-xs text-slate-600">
+    period {{ fact.period_label_raw or 'unstated' }}
+    <span class="text-slate-400">({{ fact.period_start or '?' }} to {{ fact.period_end or '?' }}, {{ fact.period_basis }})</span>
+  </div>
+  <div class="text-xs text-slate-600">scope: {{ fact.scope_tags | join(', ') or 'none' }}</div>
+  <div class="mt-2 rounded border border-slate-200 bg-slate-50 p-2 quote">{{ fact.quote }}</div>
+  <div class="mt-1 text-xs text-slate-400">
+    {{ fact.filename }} - PDF page {{ fact.page_index }}{% if fact.page_label %}, printed page {{ fact.page_label }}{% endif %}
+  </div>
+</div>
+{% endmacro %}
+{% block content %}
+<div class="mb-6 flex flex-wrap items-center gap-2 text-sm">
+  <a href="/conflicts" class="rounded border px-3 py-1 {{ 'bg-slate-900 text-white' if not filters.relation }}">all ({{ total if not filters.relation else counts.values() | sum }})</a>
+  {% for name in relations %}
+    {% if counts.get(name) %}
+    <a href="/conflicts?relation={{ name }}{% if filters.collection %}&collection={{ filters.collection }}{% endif %}"
+       class="rounded border px-3 py-1 rel-{{ name }} {{ 'ring-2 ring-slate-900' if filters.relation == name }}">
+      {{ name }} ({{ counts.get(name) }})
+    </a>
+    {% endif %}
+  {% endfor %}
+  <form class="ml-auto flex items-center gap-2">
+    {% if filters.relation %}<input type="hidden" name="relation" value="{{ filters.relation }}">{% endif %}
+    <select name="collection" class="rounded border border-slate-300 px-2 py-1">
+      <option value="">all collections</option>
+      {% for name in collections %}<option value="{{ name }}" {{ 'selected' if filters.collection == name }}>{{ name }}</option>{% endfor %}
+    </select>
+    <select name="decided_by" class="rounded border border-slate-300 px-2 py-1">
+      <option value="">rule or model</option>
+      <option value="rule" {{ 'selected' if filters.decided_by == 'rule' }}>decided by rule</option>
+      <option value="llm" {{ 'selected' if filters.decided_by == 'llm' }}>decided by model</option>
+    </select>
+    <button class="rounded bg-slate-900 px-3 py-1 text-white">apply</button>
+  </form>
+</div>
+
+<div class="space-y-6">
+  {% for link in links %}
+  <article class="rounded-lg border-2 p-4 rel-{{ link.relation }}">
+    <header class="flex flex-wrap items-baseline gap-3">
+      <h2 class="text-sm font-semibold uppercase tracking-wide">{{ link.relation | replace('_', ' ') }}</h2>
+      <span class="text-xs text-slate-600">confidence {{ '%.2f' | format(link.confidence or 0) }}</span>
+      <span class="rounded bg-white px-2 py-0.5 text-xs text-slate-600">decided by {{ link.decided_by }}</span>
+      {% if link.relative_delta is not none %}
+      <span class="text-xs text-slate-600">relative difference {{ '%.3f' | format(link.relative_delta * 100) }} per cent</span>
+      {% endif %}
+      {% if link.numeric_delta is not none %}
+      <span class="text-xs text-slate-600">absolute difference {{ link.numeric_delta | shortnum }}</span>
+      {% endif %}
+      <a class="ml-auto text-xs text-blue-700 hover:underline" href="/api/links/{{ link.link_id }}">raw record</a>
+    </header>
+
+    <p class="mt-3 text-sm">{{ link.explanation }}</p>
+
+    <div class="mt-4 grid gap-4 md:grid-cols-2">
+      {% if link.fact_a_view %}{{ fact_card(link.fact_a_view, 'A') }}{% endif %}
+      {% if link.fact_b_view %}{{ fact_card(link.fact_b_view, 'B') }}{% endif %}
+    </div>
+
+    <details class="mt-4">
+      <summary class="text-xs font-semibold uppercase tracking-wide text-slate-600">
+        Rule trace ({{ link.rule_trace | length }} checks)
+      </summary>
+      <ol class="mt-2 space-y-1 text-xs">
+        {% for check in link.rule_trace %}
+        <li class="rounded bg-white/70 p-2">
+          <span class="font-mono font-semibold">{{ loop.index }}. {{ check.name }}</span>
+          <span class="ml-2 rounded bg-slate-900 px-1.5 py-0.5 text-white">{{ check.outcome }}</span>
+          {% if check.detail %}<div class="mt-1 text-slate-600">{{ check.detail }}</div>{% endif %}
+          <div class="mt-1 quote text-slate-500">{{ check.inputs | jsonpretty }}</div>
+        </li>
+        {% endfor %}
+      </ol>
+    </details>
+  </article>
+  {% else %}
+  <p class="rounded-lg border border-slate-200 bg-white p-6 text-center text-slate-500">
+    No links match this filter yet.
+  </p>
+  {% endfor %}
+</div>
+
+{% set pages = (total // page_size) + (1 if total % page_size else 0) %}
+{% if pages > 1 %}
+<div class="mt-6 flex gap-2 text-sm">
+  {% if page > 1 %}<a class="rounded border px-3 py-1" href="?relation={{ filters.relation }}&collection={{ filters.collection }}&page={{ page - 1 }}">previous</a>{% endif %}
+  <span class="px-3 py-1 text-slate-500">page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="rounded border px-3 py-1" href="?relation={{ filters.relation }}&collection={{ filters.collection }}&page={{ page + 1 }}">next</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

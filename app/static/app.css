@@ -1,0 +1,17 @@
+/* Deliberately plain. The reasoning is the interesting part, not the styling. */
+.quote {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.rel-corroborates      { background: #ecfdf5; border-color: #6ee7b7; }
+.rel-contradicts       { background: #fef2f2; border-color: #fca5a5; }
+.rel-refines           { background: #eff6ff; border-color: #93c5fd; }
+.rel-unrelated         { background: #f8fafc; border-color: #e2e8f0; }
+.rel-reconciled_by_period  { background: #fffbeb; border-color: #fcd34d; }
+.rel-reconciled_by_scope   { background: #fdf4ff; border-color: #e9d5ff; }
+.rel-reconciled_by_unit    { background: #f0fdfa; border-color: #99f6e4; }
+.rel-reconciled_by_vintage { background: #fff7ed; border-color: #fdba74; }
+details > summary { cursor: pointer; }

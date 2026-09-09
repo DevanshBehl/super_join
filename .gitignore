@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Secrets
+.env
+
+# Generated knowledge layer state
+data/knowledge.duckdb
+data/knowledge.duckdb.wal
+data/traces.jsonl
+data/uploads/
+data/demo_output.txt
+
+# OS
+.DS_Store

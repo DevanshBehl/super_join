@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Facts{% endblock %}
+{% block content %}
+<form class="mb-6 flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm">
+  <label class="flex flex-col gap-1">
+    <span class="text-xs uppercase tracking-wide text-slate-500">Search</span>
+    <input name="q" value="{{ filters.q }}" placeholder="subject, value, or quote"
+           class="w-64 rounded border border-slate-300 px-3 py-2">
+  </label>
+  <label class="flex flex-col gap-1">
+    <span class="text-xs uppercase tracking-wide text-slate-500">Collection</span>
+    <select name="collection" class="rounded border border-slate-300 px-3 py-2">
+      <option value="">all</option>
+      {% for name in collections %}
+      <option value="{{ name }}" {{ 'selected' if filters.collection == name }}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="flex flex-col gap-1">
+    <span class="text-xs uppercase tracking-wide text-slate-500">Document</span>
+    <select name="doc_id" class="rounded border border-slate-300 px-3 py-2">
+      <option value="">all</option>
+      {% for doc in documents %}
+      <option value="{{ doc.doc_id }}" {{ 'selected' if filters.doc_id == doc.doc_id }}>{{ doc.filename }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="flex flex-col gap-1">
+    <span class="text-xs uppercase tracking-wide text-slate-500">Predicate</span>
+    <input name="predicate" value="{{ filters.predicate }}" class="w-56 rounded border border-slate-300 px-3 py-2">
+  </label>
+  <label class="flex flex-col gap-1">
+    <span class="text-xs uppercase tracking-wide text-slate-500">Period</span>
+    <input name="period" value="{{ filters.period }}" placeholder="FY24" class="w-28 rounded border border-slate-300 px-3 py-2">
+  </label>
+  <button class="rounded bg-slate-900 px-4 py-2 text-white">Filter</button>
+  <a href="/facts" class="text-slate-500 hover:underline">reset</a>
+  <span class="ml-auto text-slate-500">{{ total }} verified facts</span>
+</form>
+
+<div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+  <table class="min-w-full text-sm">
+    <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+      <tr>
+        <th class="px-4 py-3">Subject</th>
+        <th class="px-4 py-3">Predicate</th>
+        <th class="px-4 py-3">Raw value</th>
+        <th class="px-4 py-3">Normalized</th>
+        <th class="px-4 py-3">Period</th>
+        <th class="px-4 py-3">Scope</th>
+        <th class="px-4 py-3">Source</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      {% for fact in facts %}
+      <tr class="align-top">
+        <td class="px-4 py-3">{{ fact.subject_raw }}</td>
+        <td class="px-4 py-3 font-mono text-xs">{{ fact.predicate_canonical }}</td>
+        <td class="px-4 py-3 font-medium">{{ fact.value_raw }}</td>
+        <td class="px-4 py-3">
+          {% if fact.value_num is not none %}
+            {{ fact.value_num | shortnum }} <span class="text-xs text-slate-500">{{ fact.unit_canonical or '' }}</span>
+            {% if fact.magnitude_label %}<div class="text-xs text-slate-400">magnitude: {{ fact.magnitude_label }}</div>{% endif %}
+          {% else %}
+            <span class="text-slate-600">{{ fact.value_text or '' }}</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3">
+          {{ fact.period_label_raw or '' }}
+          <div class="text-xs text-slate-400">{{ fact.period_start or '' }} to {{ fact.period_end or '' }} ({{ fact.period_basis }})</div>
+        </td>
+        <td class="px-4 py-3 text-xs text-slate-600">{{ fact.scope_tags | join(', ') }}</td>
+        <td class="px-4 py-3">
+          <details>
+            <summary class="text-xs text-blue-700">{{ fact.filename }} - PDF page {{ fact.page_index }}{% if fact.page_label %}, printed {{ fact.page_label }}{% endif %}</summary>
+            <div class="mt-2 max-w-xl rounded border border-slate-200 bg-slate-50 p-2 quote">{{ fact.quote }}</div>
+            <div class="mt-1 text-xs text-slate-400">
+              verified by {{ fact.match_method }} at score {{ '%.1f' | format(fact.match_score or 0) }},
+              offsets {{ fact.evidence_char_start }} to {{ fact.evidence_char_end }},
+              confidence {{ '%.2f' | format(fact.confidence or 0) }}
+            </div>
+            {% if fact.qualifiers %}
+            <pre class="mt-1 quote text-slate-500">{{ fact.qualifiers | jsonpretty }}</pre>
+            {% endif %}
+          </details>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No facts match this filter.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% set pages = (total // page_size) + (1 if total % page_size else 0) %}
+{% if pages > 1 %}
+<div class="mt-4 flex gap-2 text-sm">
+  {% if page > 1 %}<a class="rounded border px-3 py-1" href="?{{ request.url.query | replace('page=' ~ page, '') }}&page={{ page - 1 }}">previous</a>{% endif %}
+  <span class="px-3 py-1 text-slate-500">page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="rounded border px-3 py-1" href="?{{ request.url.query | replace('page=' ~ page, '') }}&page={{ page + 1 }}">next</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

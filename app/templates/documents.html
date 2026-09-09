@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Documents{% endblock %}
+{% block content %}
+<section class="mb-8 rounded-lg border border-slate-200 bg-white p-6">
+  <h1 class="text-base font-semibold">Upload a PDF</h1>
+  <p class="mt-1 text-sm text-slate-500">
+    The file is parsed, chunked, extracted, verified against its own text, and linked against everything
+    already in its collection. Progress appears below as each stage finishes.
+  </p>
+  <form id="upload-form" class="mt-4 flex flex-wrap items-center gap-3">
+    <input type="file" name="file" accept="application/pdf"
+           class="text-sm file:mr-3 file:rounded file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-white">
+    <input type="text" name="collection" list="collection-list" placeholder="collection"
+           class="rounded border border-slate-300 px-3 py-2 text-sm">
+    <datalist id="collection-list">
+      {% for name in collections %}<option value="{{ name }}"></option>{% endfor %}
+    </datalist>
+    <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-sm text-white">Ingest</button>
+    <span id="upload-status" class="text-sm text-slate-600"></span>
+  </form>
+</section>
+
+<h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+  {{ documents | length }} document{{ '' if documents | length == 1 else 's' }}
+</h2>
+<div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+  <table class="min-w-full text-sm">
+    <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+      <tr>
+        <th class="px-4 py-3">Document</th>
+        <th class="px-4 py-3">Collection</th>
+        <th class="px-4 py-3">Type</th>
+        <th class="px-4 py-3">As of</th>
+        <th class="px-4 py-3 text-right">Pages</th>
+        <th class="px-4 py-3 text-right">Chunks</th>
+        <th class="px-4 py-3 text-right">Facts</th>
+        <th class="px-4 py-3">Status</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      {% for doc in documents %}
+      <tr>
+        <td class="px-4 py-3">
+          <div class="font-medium">{{ doc.title or doc.filename }}</div>
+          <div class="text-xs text-slate-500">{{ doc.filename }}</div>
+          {% if doc.publisher %}<div class="text-xs text-slate-400">{{ doc.publisher }}</div>{% endif %}
+        </td>
+        <td class="px-4 py-3"><a class="text-blue-700 hover:underline" href="/facts?collection={{ doc.collection }}">{{ doc.collection }}</a></td>
+        <td class="px-4 py-3 text-slate-600">{{ doc.doc_type or '' }}</td>
+        <td class="px-4 py-3 text-slate-600">{{ doc.as_of_date or '' }}</td>
+        <td class="px-4 py-3 text-right">{{ doc.n_pages }}</td>
+        <td class="px-4 py-3 text-right">{{ doc.n_chunks }}</td>
+        <td class="px-4 py-3 text-right">
+          <a class="text-blue-700 hover:underline" href="/facts?doc_id={{ doc.doc_id }}">{{ doc.n_verified_facts }}</a>
+          <span class="text-xs text-slate-400">/ {{ doc.n_facts }}</span>
+        </td>
+        <td class="px-4 py-3">
+          {% if doc.status in ('done', 'failed') %}
+            <span class="rounded px-2 py-1 text-xs {{ 'bg-emerald-50 text-emerald-700' if doc.status == 'done' else 'bg-rose-50 text-rose-700' }}">{{ doc.status }}</span>
+          {% else %}
+            <span class="text-xs text-slate-600" data-poll-doc="{{ doc.doc_id }}">{{ doc.status }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="px-4 py-6 text-center text-slate-500">
+        Nothing ingested yet. Upload a PDF above, or run <code>python scripts/ingest_all.py</code>.
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

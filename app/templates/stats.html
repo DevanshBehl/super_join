@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Stats{% endblock %}
+{% macro tile(label, value, hint='') %}
+<div class="rounded-lg border border-slate-200 bg-white p-4">
+  <div class="text-xs uppercase tracking-wide text-slate-500">{{ label }}</div>
+  <div class="mt-1 text-2xl font-semibold">{{ value }}</div>
+  {% if hint %}<div class="text-xs text-slate-400">{{ hint }}</div>{% endif %}
+</div>
+{% endmacro %}
+{% block content %}
+<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  {{ tile('Documents', stats.n_documents, stats.n_pages ~ ' pages, ' ~ stats.n_chunks ~ ' chunks') }}
+  {{ tile('Verified facts', stats.n_verified_facts, stats.n_quarantined ~ ' quarantined') }}
+  {{ tile('Verification rate', '%.1f%%' | format(stats.verification_rate * 100), 'quote located in its own chunk') }}
+  {{ tile('Links', stats.n_links, stats.links_by_decider | jsonpretty | replace('\n', ' ')) }}
+  {{ tile('Entities', stats.n_entities) }}
+  {{ tile('Predicates', stats.n_predicates, 'registry grows with the corpus') }}
+  {{ tile('Model calls', stats.n_llm_calls, stats.n_cache_hits ~ ' cache hits') }}
+  {{ tile('Tokens', '{:,}'.format(stats.tokens_in + stats.tokens_out), '{:,} in, {:,} out'.format(stats.tokens_in, stats.tokens_out)) }}
+</div>
+
+<section class="mt-8 grid gap-6 lg:grid-cols-2">
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="text-sm font-semibold">Candidate funnel</h2>
+    <p class="mt-1 text-xs text-slate-500">
+      Every stage narrows the comparison set. Only the last row costs tokens.
+    </p>
+    <table class="mt-3 w-full text-sm">
+      <tbody class="divide-y divide-slate-100">
+        <tr><td class="py-2">Pairs surviving blocking</td><td class="py-2 text-right font-medium">{{ '{:,}'.format(stats.funnel.blocked_pairs) }}</td></tr>
+        <tr><td class="py-2">Pairs surviving vector retrieval</td><td class="py-2 text-right font-medium">{{ '{:,}'.format(stats.funnel.candidate_pairs) }}</td></tr>
+        <tr><td class="py-2">Settled by the rule engine</td><td class="py-2 text-right font-medium">{{ '{:,}'.format(stats.funnel.rule_decided) }}</td></tr>
+        <tr><td class="py-2">Sent to the adjudicator</td><td class="py-2 text-right font-medium">{{ '{:,}'.format(stats.funnel.residue_for_llm) }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="text-sm font-semibold">Links by relation</h2>
+    <table class="mt-3 w-full text-sm">
+      <tbody class="divide-y divide-slate-100">
+        {% for relation, count in stats.links_by_relation.items() %}
+        <tr>
+          <td class="py-2"><a class="text-blue-700 hover:underline" href="/conflicts?relation={{ relation }}">{{ relation | replace('_', ' ') }}</a></td>
+          <td class="py-2 text-right font-medium">{{ count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="mt-8 grid gap-6 lg:grid-cols-2">
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="text-sm font-semibold">Seconds by stage</h2>
+    <table class="mt-3 w-full text-sm">
+      <tbody class="divide-y divide-slate-100">
+        {% for stage, seconds in stats.seconds_by_stage.items() %}
+        <tr><td class="py-2">{{ stage }}</td><td class="py-2 text-right">{{ '%.1f' | format(seconds) }} s</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="text-sm font-semibold">Predicate registry growth</h2>
+    <table class="mt-3 w-full text-sm">
+      <tbody class="divide-y divide-slate-100">
+        {% for row in stats.predicate_growth %}
+        <tr><td class="py-2">{{ row.day }}</td><td class="py-2 text-right">{{ row.n_new }} new predicates</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="mt-8 rounded-lg border border-slate-200 bg-white p-4">
+  <h2 class="text-sm font-semibold">Predicate registry, most used first</h2>
+  <div class="mt-3 flex flex-wrap gap-2">
+    {% for entry in registry %}
+    <a href="/facts?predicate={{ entry.predicate_canonical }}"
+       class="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50">
+      {{ entry.predicate_canonical }} <span class="text-slate-400">{{ entry.n_facts }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="mt-8 rounded-lg border border-slate-200 bg-white p-4">
+  <h2 class="text-sm font-semibold">Quarantine: {{ quarantine_total }} facts whose quote did not verify</h2>
+  <p class="mt-1 text-xs text-slate-500">
+    These never enter the active set. They are kept because a discarded extraction is still evidence
+    about how the system fails.
+  </p>
+  <table class="mt-3 w-full text-sm">
+    <thead class="text-left text-xs uppercase tracking-wide text-slate-500">
+      <tr><th class="py-2">Subject</th><th class="py-2">Value</th><th class="py-2">Failed quote</th><th class="py-2 text-right">Best score</th></tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      {% for fact in quarantine %}
+      <tr class="align-top">
+        <td class="py-2 pr-3">{{ fact.subject_raw }}<div class="font-mono text-xs text-slate-500">{{ fact.predicate_canonical }}</div></td>
+        <td class="py-2 pr-3">{{ fact.value_raw }}</td>
+        <td class="py-2 pr-3 quote">{{ fact.quote }}<div class="mt-1 text-xs text-slate-400">{{ fact.filename }}, PDF page {{ fact.page_index }}, {{ fact.match_method }}</div></td>
+        <td class="py-2 text-right">{{ '%.1f' | format(fact.match_score or 0) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="py-4 text-center text-slate-500">Nothing in quarantine.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="mt-8 rounded-lg border border-slate-200 bg-white p-4">
+  <h2 class="text-sm font-semibold">Recent runs</h2>
+  <table class="mt-3 w-full text-sm">
+    <thead class="text-left text-xs uppercase tracking-wide text-slate-500">
+      <tr><th class="py-2">Stage</th><th class="py-2">Document</th><th class="py-2 text-right">Items</th>
+          <th class="py-2 text-right">Model calls</th><th class="py-2 text-right">Seconds</th></tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      {% for run in runs %}
+      <tr>
+        <td class="py-2">{{ run.stage }}</td>
+        <td class="py-2 text-slate-500">{{ run.filename or '' }}</td>
+        <td class="py-2 text-right">{{ run.n_items }}</td>
+        <td class="py-2 text-right">{{ run.n_llm_calls }}</td>
+        <td class="py-2 text-right">{{ '%.2f' | format((run.notes | from_json).get('seconds', 0)) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
